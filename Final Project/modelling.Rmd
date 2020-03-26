@@ -1,0 +1,205 @@
+---
+title: "Modeling"
+author: "Shikhar Khanna"
+date: "14/07/2019"
+output: html_document
+---
+
+```{r}
+data = read.csv("day.csv")
+data$season = as.factor(data$season)
+levels(data$season) <- c("spring", "summer", "fall", "winter")
+
+data$holiday = as.factor(data$holiday)
+levels(data$holiday) = c("no", "yes")
+
+data$workingday = as.factor(data$workingday)
+levels(data$workingday) = c("no", "yes")
+
+data$weathersit = as.factor(data$weathersit)
+levels(data$weathersit) = c("Clearish", "Misty", "LightPrecip")
+
+data$weekday = as.factor(data$weekday)
+levels(data$weekday) = c("Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat")
+
+data$mnth = as.factor(data$mnth)
+levels(data$mnth) = c("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
+
+data$yr = as.factor(data$yr)
+levels(data$yr) = c("2011", "2012")
+
+
+data=data[,c(-1,-2,-14,-15)]
+```
+
+<br>
+
+Lets separate numerical and categorical variable
+```{r}
+numerical <- unlist(lapply(data, is.numeric)) # contains bolean value against each variable indicating wether that variable is a numeric or not
+```
+
+<br>
+
+Lets first start by using only the numerical predictors to model the target variable
+```{r}
+data_numerical= data[, numerical] # get the target and all the numerical columns
+bike_mod_num = lm(cnt ~ ., data = data_numerical)
+summary(bike_mod_num)[["coefficients"]]
+summary(bike_mod_num)[["adj.r.squared"]]
+par(mfrow = c(2, 2))
+plot(bike_mod_num,col = 'dodgerblue')
+```
+
+<br>
+
+***Findings:***
+
+- The above results show that the temp is not very significant predictor as it has a high p value , this can be attributed to the fact that temp and atemp were highly correlated as we saw in the EDA and may be because of that, the  effect of one gets eaten up by other.
+
+- The Multiple R-squared is quite low and does not discount for a good model.
+
+- The Fitted vs Residual plot shows a bit of non linear trend and the leverage plot also highlights some outliers.
+
+- We can expect there results to improve as we start using categorical columns with dummy variables.
+
+
+<br>
+
+Lets now use both the categorical and numerical predictor and see if we get some lift in the models performance.
+
+```{r}
+bike_mod_all=lm(cnt~., data=data)
+summary(bike_mod_all)[["coefficients"]]
+summary(bike_mod_all)[["adj.r.squared"]]
+par(mfrow = c(2, 2))
+plot(bike_mod_all,col = 'dodgerblue')
+```
+
+<br>
+
+***Findings:***
+
+- Looks like this definitely helped in lifting the performance of the model as we now have a higher value of adjusted r-squared, but this comes at the cost at creating a complex model and the results show that not all variables are significant.
+
+- The residuals seems to have lost there normality.
+
+- The fitted vs residual plot shows a non linear trend and we also see presence of some extreme outlier.
+
+- The leverage plot also indicates presence of some outliers which we might have to check on as we go down the analysis.
+
+
+<br>
+
+Based upon the results it would be good to test for the significance for few of the categorical variables which are listed below:
+
+- Month
+
+- Week Day
+
+- Working Day
+
+
+
+```{r}
+bike_mod_w_month=lm(cnt~.-mnth, data=data) # model without month
+bike_mod_w_weekday=lm(cnt~.-weekday, data=data) # model without weekday
+bike_mod_w_workingday=lm(cnt~.-workingday, data=data) # model without workingday
+anova(bike_mod_w_month,bike_mod_w_weekday,bike_mod_w_workingday,bike_mod_all)
+```
+
+<br>
+
+***Findings:***
+
+- The test shows that month, weekday are significant predictors hence we cant rule them out.Even though the month variable is statistically significant , it might be that just few levels are useful and rest of them does not help. We will use model selection schemes later to find that out.
+
+- Acoording to test results working day variable seems to be non significant and we can rule out this variable.
+
+<br>
+
+
+Lets fit the model again, without the working day variable.
+
+```{r}
+data_2= data[,c(-6)]
+bike_mod_all_2=lm(cnt~., data=data_2)
+summary(bike_mod_all_2)[["adj.r.squared"]]
+```
+
+<br>
+
+This looks like a good starting point. We can now get started with identifying multi collinearity in the model, we will start looking at VIF to understand if we have multi collinearity.
+
+```{r}
+library(faraway)
+vif(bike_mod_all_2)
+```
+
+<br>
+
+As suspected before temp and atemp has high level of collinearity.Lets get the partial correlation coefficient for the temp variable and see if its useful for the model
+
+```{r}
+temp_model=lm(temp~.-cnt, data=data_2)
+cor(resid(bike_mod_all_2), resid(temp_model))
+
+```
+
+<br>
+
+Since the value is quite small , we can consider removing temp variable from the model. Although multi collinearity might not have much impact on the prediction but it does have an impact on the inference of the model.
+
+
+```{r}
+data_3= data[,c(-6, -8)]
+bike_mod_all_3=lm(cnt~., data=data_3)
+summary(bike_mod_all_3)[["adj.r.squared"]]
+```
+
+<br>
+
+Next we would want to also check for potential outliers , we have 3 ways of doing it :
+
+- Leverage
+- Standard Residual
+- Cooks distance
+
+We will be using cooks distance to identify any such outlier and see the effect of it on the model.
+
+First lets calculate no of observation flagged by cooks distance:
+
+```{r}
+sum(cooks.distance(bike_mod_all_3) > 4 / length(cooks.distance(bike_mod_all_3)))
+```
+
+<br>
+
+Next we can consider fitting a model after removing these observation
+
+
+```{r}
+cokks_distance = cooks.distance(bike_mod_all_3)
+bike_mod_all_4 = lm(cnt ~.,
+                    data = data_3,
+                    subset = cokks_distance <= 4 / length(cokks_distance))
+summary(bike_mod_all_4)[["adj.r.squared"]]
+par(mfrow = c(2, 2))
+plot(bike_mod_all_4,col = 'dodgerblue') 
+
+
+```
+
+<br>
+
+***Findings:***
+
+- Removing these outliers helped get a lift in the adjusted r-squared from 84% to 90% which is a good thing.
+
+- The residuals start looking more normal.
+
+- The residual vs fitted plot still show some non linear pattern which indicates to the fact to try out higher order terms.
+
+- The leverage plot looks much neater.
+
+

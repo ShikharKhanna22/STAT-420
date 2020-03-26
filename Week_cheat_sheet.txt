@@ -1,0 +1,395 @@
+Vectors
+------------------
+------------------
+------------------
+
+
+x = c(1, 3, 5, 7, 8, 9)
+c(42, "Statistics", TRUE)
+c(42, TRUE)
+
+(y = 1:100)
+seq(from = 1.5, to = 4.2, by = 0.1)
+rep("A", times = 10)
+rev(x)
+
+c(x, rep(seq(1, 9, 2), 3), c(1, 2, 3), 42, 2:4)
+
+length(x)
+
+x[1]
+x[-2]
+x[1:3]
+x[c(1,3,4)]
+z = c(TRUE, TRUE, FALSE, TRUE, TRUE, FALSE); x[z]
+x[x > 3] ; x[x != 3]
+
+
+
+Vectorization
+-----------------
+x = 1:10; X+1
+x + rep(2, 6) ; x + y
+x > rep(3, 6)
+
+
+Equality
+----------
+all(x + y == rep(x, 10) + y)
+identical(x + y, rep(x, 10) + y)
+any
+all.equal
+
+
+Logical Operators
+------------------
+3 != 42
+!(3 > 42)
+(3 > 42) | TRUE
+(3 < 4) & ( 42 > 13)
+
+
+coercion
+---------
+sum(x > 3)
+as.numeric(x > 3)
+
+
+Indexing
+---------
+which(x > 3)
+x[which(x > 3)]
+which(x == max(x)) ; which.max(x)
+
+
+
+Matrices
+------------------
+------------------
+------------------
+
+Y = matrix(x, nrow = 3, ncol = 3, byrow = TRUE) 
+Z = matrix(c(9, 2, -3, 2, 4, -2, -3, -2, 16), 3, byrow = TRUE)
+Z = matrix(0, 2, 4)
+rbind(x, rev(x), rep(1, 9))
+cbind(col_1 = x, col_2 = rev(x), col_3 = rep(1, 9))
+t(X)
+solve(Z)
+diag(3)
+diag(1:5)
+
+
+X[1, 2] ; X[1, ] ; X[2, c(1, 3)]
+dim(X)
+rowSums(X) ; colSums(X)
+rowMeans(X) ; colMeans(X)
+
+
+X + Y ; X * Y ; X %*% Y
+solve(Z) %*% Z
+all.equal(solve(Z) %*% Z, diag(3))
+diag(Z)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+MLR
+-----------
+--------------
+------------
+
+# read the data from the web
+autompg = read.table(
+  "http://archive.ics.uci.edu/ml/machine-learning-databases/auto-mpg/auto-mpg.data",
+  quote = "\"",
+  comment.char = "",
+  stringsAsFactors = FALSE)
+# give the dataframe headers
+colnames(autompg) = c("mpg", "cyl", "disp", "hp", "wt", "acc", "year", "origin", "name")
+# remove missing data, which is stored as "?"
+autompg = subset(autompg, autompg$hp != "?")
+# remove the plymouth reliant, as it causes some issues
+autompg = subset(autompg, autompg$name != "plymouth reliant")
+# give the dataset row names, based on the engine, year and name
+rownames(autompg) = paste(autompg$cyl, "cylinder", autompg$year, autompg$name)
+# remove the variable for name, as well as origin
+autompg = subset(autompg, select = c("mpg", "cyl", "disp", "hp", "wt", "acc", "year"))
+# change horsepower from character to numeric
+autompg$hp = as.numeric(autompg$hp)
+# check final structure of data
+str(autompg)
+
+
+Data clean (read, headers, missing data, rows, rowname, variable, datatype)
+model = lm(mpg ~ wt + year, data = autompg)
+coeff(model) # fitted values
+
+summary(model) - 
+	Estimates == coeff, new values for testing(Std error, t value, p value)
+	Residual standard error/sigma
+	Multipe R Squared, Adjusted R squared
+	Fstatistic
+
+Y = Beta*X ==> Assume the model
+	Solve formula for beta_hat
+	verify Beta_hat == Estimates from LM == coeff from LM
+	since y_hat = beta_hat * X, obtain y_hat (fitted value)
+	residuals (e) = y - y_hat
+	se_sqr = eT*e/(n-p)
+	calculate se_sqr which is estimate for sigma_sqr, then se
+	verify se == summary(model)$sigma == Residual standard error
+
+beta_hat = (Xt*X)^-1 * Xt*y
+beta_hat = solve(t(X) %*% X) %*% t(X) %*% y == coef(mpg_model)
+sqrt(sum((y - y_hat) ^ 2) / (n - p)) == sqrt(t(e) %*% e / (n - p)) == summary(mpg_model)$sigma	
+
+
+
+Multiple R^2
+------------------
+summary(mpg_model)$r.squared
+Using fewer variables, less R^2, less variation is explained
+need some way to determine the diff between two models and which one to prefer
+
+
+magnitude and sign of co-eff can change changes by reducign the variables
+because there is diff in interpreting parameters in SLR and MLR.
+have to consider interpretation of the parameter for acceleration for a particular horsepower.
+
+
+Chapter: Simulation
+--------------------
+--------------------
+verify the distribution results from multiple linear regression via simulation study. 
+
+beta_hat = (Xt*X)^-1 * Xt*y
+beta_hat ~ N(beta , sigma_sqr((Xt*X)^-1)
+var[beta_hat_sub_j] = sigma_sqr * C_sub_jj
+SD = sqrt(var[beta_hat_sub_j])
+
+set.seed(100), n= 100, p=3, beta0=5, beta1=-2, beta2=6, sigma=4
+x0=rep(1,n), x1=sample(seq(1,10,n)), x2=sample(seq(1,10,n))
+X = cbind(x0,x1,x2)
+C = solve(t(X) %*% X)
+
+# intialize
+y = rep(0,n) , beta2_hat = rep(0,10000)
+
+for i in 1:10000 {
+  eps = rnorm(n, 0, sigma)
+  y = beta0*x0 + beta1*x1 + beta2*x2 + eps
+  fit = lm(y ~ x1 + x2)
+  beta2_hat[i] = coef(fit)[3]
+}
+
+mean(beta2_hat) = 5.998 
+var(beta2_hat) = 0.02361 , hence beta_hat ~ N(beta , sigma_sqr * (Xt*X)^-1)
+	mean(beta2_hat) should be close to beta2 
+	var(beta2_hat) should be close to sigma^2*C_sub_22 
+	C_sub_22 corresponds to 3rd row and 3rd col
+	sigma^2 * C[2+1,2+1] = 16 * 0.00147 = 0.0236
+
+To prove beta2_hat forllows a N distribution
+hist(beta2_hat, prob=TRUE, breaks=20, border="blue)
+curve(dnorm(x,mean=beta2, sd=sqrt(sigma^2 * C[2+1,2+1]), col= , add=TRUE, lwd=3)
+
+match probabilities to verify emperical dist matches true dist
+
+
+
+Code Improvising - clearer code
+-----------------------
+
+func_beta2_hat = function{
+  eps = rnorm(n, 0, sigma)
+  y = beta0*x0 + beta1*x1 + beta2*x2 + eps
+  fit = lm(y ~ x1 + x2)
+  coef(fit)[3]
+}
+
+beta2_hat_alt = replicate(n=10000, func_beta2_hat())
+
+system.time(
+for i in 1:10000 {
+  eps = rnorm(n, 0, sigma)
+  y = beta0*x0 + beta1*x1 + beta2*x2 + eps
+  fit = lm(y ~ x1 + x2)
+  beta2_hat[i] = coef(fit)[3] }
+)
+
+system.time(
+  {beta2_hat_alt = replicate(n=10000, func_beta2_hat())}
+)
+
+DO NOT
+beta2_hat = NULL, beta_hat_2 = c(beta_hat_2, coef(fit)[3])
+
+
+
+
+
+Intervals and Test for MLR in R
+---------------------------------
+---------------------------------
+---------------------------------
+
+mpg_model = lm(mpg ~ wt + year, data=autompg)
+summary(autompg)$coef
+  # each row here corresponds to a test about a single predictor when all of the other 	predictors considered in the overall model are being used.
+  # whether or not weight is a significant predictor when year is in the model
+
+summary(autompg)$coef["year","Pr(>|t|)"]
+  # p value for testing for beta two here, in particular whether or not zero
+
+confint(mpg_model, level=0.99)
+  # create interval estimates for the 3 beta parameters of this model
+  # one row for the intercept and remainder two for the predictors of the model.
+  # interval for a year does not contain zero i.e. if we performed the hypothesis test 
+	about beta_2 at alpha of 0.01, we would reject because it does not contain zero.
+	and that's the same decision we would have made here because p is much less than 0.01.
+
+
+new_cars = data.frame(wt=c(3500,5000),year=c(76,81))
+predict(mpg_model, newdata-new_cars, interval="confidence", level=0.99)
+predict(mpg_model, newdata-new_cars, interval="prediction", level=0.99)
+
+  # CI for mean response and prediction intervals for new observations
+  # 99 percent confidence rules for the mean at these x values
+  # R gives both the point estimate (y_hat) value as well as the interval estimate for the specified level.
+  # PI point estimates are the same, but intervals are wider since indv obs is much more variable than a mean.
+  
+Can we trust those estimates?? Extrapolation??
+new_cars$wt  vs   range(autompg$wt)
+plot(year ~ wt, data=autompg, pch=20, col="", cex=1.5)
+points(new_cars, col="", pch="X", cex=3)
+  # look for the extrapolations
+  # new weights of the cars are both in the range of weights of cars in the data set.
+  # new years of the cars are also in the range of the data set.
+  # However, if we create a plot one is contained within the blob of data whereas the other is very much outside.
+
+
+
+T distribution with n-p parameters
+let's obtain the critical value in these intervals at the 99 percent confidence level
+confint(mpg_model, level=0.99m, parm="wt") # CI for beta1, point + interval
+est = summary(mpg_model)$coef["wt", "Estimate"] # point estimate for beta1
+se = summary(mpg_model)$coef["wt", "Std. Error"] # se for beta1
+  # I want to do is create the confidence intervals using this est and se
+
+p = length(coef(mpg_model))
+df = nrow(autompg) - length(coef(mpg_model))
+CI = 0.99
+alpha_by_2 = (1-0.99)/2
+crit = abs(qt(alpha_by_2,df) # t-dist
+CI = c(est - crit*se, est + crit*se)
+  # verify CI should be exaectly equal to confint(mpg_model, level=0.99m, parm="wt")
+  # beta_j_hat +- t_sub_n-2 * se * sqrt(c_sub_jj)
+
+
+
+
+
+Significance of Regression
+------------------------------
+------------------------------
+------------------------------
+
+Decomposition of variance
+we have the sum of squares total is equal to the sum of squares error plus the sum of squares for the regression. 
+our predictive values are from a multiple linear regression model instead of simple linear regression model.
+sum of squares error quantified the unexplained variation in the response variable.
+sum of squares regression quantified the explained variation in the response variable.
+
+R squared for MLR
+It is the sum of squares for the regression divided by the sum of squares total. 
+proportion of the response var explained by a more complicated linear reln using multiple predictrs instead of a single.
+In SLR we could test for the slope parameter and that determined the significance of the regression.
+So if there was no slope in SLR , there was no linear relationship between x and Y
+In MLR even if we fail to reject the null hypothesis and we say that x2 is not needed in this model, 
+  we still have all the other predictors say, x1, x3 through x sub p-1 in this model. 
+  And there's still some relationship between Y and other predictors. 
+  So the question we want to ask now is are any of the predictors useful?
+So we want to know overall, does this regression help explain Y, or tells us almost nothing about Y and is not necessary
+we need to have a new null hypothesis that sets all of the beta parameters in front of the predictors equal to zero.
+  NULL Model: Y_i = beta0 + epsilon # no reln btw y and x, modeling y as the average of the y_i's
+
+
+
+F statistic will be small when the prediction from the full model and the null model are very similar to each other. 
+F statistic will be very large when the full predictions and the null predictions are very far from each other.
+this statistic has an F distribution with p-1 and n-p degrees of freedom. 
+p value will be the prob that this particular F dist is larger than the observed value of the test statistic.
+p value - probability of seeing something more extreme than what we've observed, 
+if the p value Is less than our pre-specified alpha, we would reject the null hypothesis.
+
+
+## So summarizing the significance of regression test ##
+we want to know are any of the predictors useful for explaining the relationship with Y. 
+We hypothesize that none of them are useful, and our alternative is that at least one of them is useful. 
+So we carry out the test, and if we fail to reject the null hypothesis, then there is no linear relationship. 
+And if we reject the null hypothesis, there is some linear reln. Meaning at least one of these beta's is non-zero. 
+if there's no linear relationship here, this regression is not useful for predicting Y. 
+if there is some linear relationship, that means the regression is helpful for either explaining or predicting Y. 
+
+
+
+General Nested Models:-
+it turns out the residual sum of squares for the larger model will never be worse than the pne for the smaller model. 
+Similarly the R squared for the larger model will never be smaller than the R squared for the smaller model. 
+So because of that, we don't really want to use either of these to choose between them.
+We like models that are both small and interpretable, Because it has most of the same performance in the predictive sense
+So unless a larger model has a significantly lower residual sum of squares, or a significantly increased R squared, we'll stick to the smaller model.
+We say that a smaller model is nested inside of a larger model if each of its predictors is contained in the large model.
+the null hypothesis tells us q parameters in the full model equal to 0, 
+and then the resulting model is immediately nested inside of the full model and it is also smaller. 
+the alternative here is that at least one of these parameters is non-zero.
+So if we assume the null hypothesis is true, this statistic follows an F distribution with p-q and n-p degrees of freedom.
+test statistic will be small, when the predictions from the full model are very similar to the predictions from the null model. 
+And it will be large when they're very far apart. And that would be unexpected under the null hypothesis.
+make a decision by comparing p to our prespecified alpha. And then fail to reject the null hypothesis, or we can reject.
+So if we fail to reject the null hypothesis, we prefer the smaller model. And if we reject the null hypothesis, we prefer the larger model.
+And because we have this preference for smaller models, it would take a significant difference for us to choose the larger model.
+So it turns out that the t test and the F test, in the case of simple linear regression, are equal. 
+Again, they would give us the same p value, and the t test statistic squared would be the F test statistic.
+
+
+
+
+null_mpg_model = lm(mpg ~ 1, data = autompg)
+full_mpg_model = lm(mpg ~ wt + year, data = autompg)
+anova(null_mpg_model, full_mpg_model) # perform the significance of regression
+
+We see that the value of the F statistic is 815.55, and the p-value is extremely low, 
+so we reject the null hypothesis at any reasonable a and say that the regression is significant. 
+At least one of wt or year has a useful linear relationship with mpg.
+
+summary(mpg_model)
+p value of F statistic == p value in ANOVA table
+F test statistc == F test statistc in ANOVA table
+DOF == DOF 
+
+summary(full_mpg_model)$r.squared =  0.8082
+# SSReg
+sum((fitted(full_mpg_model) - fitted(null_mpg_model)) ^ 2) = 19205.03
+length(coef(full_mpg_model)) - length(coef(null_mpg_model))
+# SSE
+sum(resid(full_mpg_model) ^ 2)
+length(resid(full_mpg_model)) - length(coef(full_mpg_model))
+# SST
+sum(resid(null_mpg_model) ^ 2) = 23761.67
+length(resid(null_mpg_model)) - length(coef(null_mpg_model))
+# Verify and match
+SSReg/SST = 0.808235
+

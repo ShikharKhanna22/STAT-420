@@ -1,0 +1,831 @@
+---
+title: "Understanding the effects of Seasonal and Environmental variables to predict the short term demand of bikes"
+author: "Mohit Khanna (mkhanna2@illinois.edu), Eric A. Scuccimarra (eas7@illinois.edu), Shikhar Khanna (shikhar2@illinois.edu)"
+date: "28/07/2019"
+output:
+  html_document: 
+    toc: yes
+  pdf_document: default
+urlcolor: cyan
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(RColorBrewer)
+library(faraway)
+palette(brewer.pal(n = 12, name = "Set3"))
+```
+
+<br>
+
+## Introduction
+
+
+Bike sharing systems are new generation of traditional bike rentals where whole process from membership, rental and return back has become automatic. Through these systems, user is able to easily rent a bike from a particular position and return back at another position. Currently, there are about over 500 bike-sharing programs around the world which is composed of over 500 thousands bicycles. Today, there exists great interest in these systems due to their important role in traffic, environmental and health issues.
+
+Bike-sharing rental process is highly correlated to the environmental and seasonal settings. For instance, weather conditions, precipitation, day of week, season, hour of the day, etc. can affect the rental behaviors. The core data set is related to the two-year historical log corresponding to years 2011 and 2012 from Capital Bikeshare system, Washington D.C., USA which is publicly available in http://capitalbikeshare.com/system-data or can be downloaded from UCI Machine Learning repository https://archive.ics.uci.edu/ml/datasets/bike+sharing+dataset. The data is aggregated on daily basis and then extracted and added the corresponding weather and seasonal information.
+
+<br>
+
+The dataset consist of following variables:
+
+	- instant: record index
+	- dteday : date
+	- season : season (1:springer, 2:summer, 3:fall, 4:winter)
+	- yr : year (0: 2011, 1:2012)
+	- mnth : month ( 1 to 12)
+	- holiday : weather day is holiday or not (extracted from http://dchr.dc.gov/page/holiday-schedule)
+	- weekday : day of the week
+	- workingday : if day is neither weekend nor holiday is 1, otherwise is 0.
+	+ weathersit : 
+		- 1: Clear, Few clouds, Partly cloudy, Partly cloudy
+		- 2: Mist + Cloudy, Mist + Broken clouds, Mist + Few clouds, Mist
+		- 3: Light Snow, Light Rain + Thunderstorm + Scattered clouds, Light Rain + Scattered clouds
+		- 4: Heavy Rain + Ice Pallets + Thunderstorm + Mist, Snow + Fog
+	- temp : Normalized temperature in Celsius. The values are divided to 41 (max)
+	- atemp: Normalized feeling temperature in Celsius. The values are divided to 50 (max)
+	- hum: Normalized humidity. The values are divided to 100 (max)
+	- windspeed: Normalized wind speed. The values are divided to 67 (max)
+	- casual: count of casual users
+	- registered: count of registered users
+	- cnt: count of total rental bikes including both casual and registered
+
+<br>
+
+We will use this dataset to predict the count of rental bikes(cnt variable) based upon the features we have seen above.
+
+<br>
+
+***Source:*** The core data set is related to the two-year historical log corresponding to years 2011 and 2012 from Capital Bikeshare system, Washington D.C., USA which is publicly available in http://capitalbikeshare.com/system-data.
+
+<br>
+
+The purpose for this work is to understand how variables in the bike sharing dataset combine in complex relationships to predict the demand for bike and how attributes like like weather and time affect a quantitative outcome of bike rentals. The quantification of the relationship will assist in forecasting demand for bike rentals in the short term.
+
+<br>
+
+***
+## Method
+
+<br>
+
+### Load and Clean the Data
+
+
+The data consists of CSV files containing daily and hourly summaries of bike rentals with the corresponding weather. We decided to focus on the daily data.
+
+```{r load_data}
+data = read.csv("day.csv")
+str(data)
+```
+
+<br>
+
+In the imported data the only categorical feature is the date, which we will remove since it is unique to each row. Some of the features should be categorical, so we will convert them to factors and assign meaningful levels.
+
+
+```{r clean_up_categories}
+data$season = as.factor(data$season)
+levels(data$season) <- c("spring", "summer", "fall", "winter") # load it as a factor with levels
+
+data$holiday = as.factor(data$holiday)
+levels(data$holiday) = c("no", "yes") # load it as a factor with levels
+
+data$workingday = as.factor(data$workingday)
+levels(data$workingday) = c("no", "yes") # load it as a factor with levels
+
+data$weathersit = as.factor(data$weathersit)
+levels(data$weathersit) = c("Clearish", "Misty", "LightPrecip") # load it as a factor with levels
+
+data$weekday = as.factor(data$weekday)
+levels(data$weekday) = c("Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat") # load it as a factor with levels
+
+data$mnth = as.factor(data$mnth)
+levels(data$mnth) = c("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec") # load it as a factor with levels
+
+str(data) # look at the structure of transformed data
+```
+
+We should note that although there are four levels to the Weathersit specified in the documentation, only three of those levels actually appear in the data.
+
+<br>
+
+### Check for Missing Data
+
+```{r check_for_missing_data}
+sum(is.na(data))
+```
+
+There are no fields missing in the data.
+
+<br>
+
+### Exploratory Data Analysis
+
+
+
+Before beginning the process of modelling the data we performed exploratory data analysis to gain insight into the distribution of features and their relationships. As this analysis was not directly related to the choice of a model it is included in the Appendix.
+
+The exploratory analysis looked at the distributions of individual features, relationships between features and the response, correlation between features, and tried to find interactions between features as related to the response.
+
+<br>
+
+### Modeling
+
+
+First we remove features that will not be used for our modeling. Instance and Date are unique for each row, and we also remove casual and registered as we are modeling total ridership.
+
+```{r}
+data=data[,c(-1,-2,-14,-15)] # remove instance, date, causal, registered variable since those are not needed for our model.
+```
+
+We also create a function to calculate LOOCV-RMSE as we will be using this to evaluate our models.
+
+```{r}
+# function to calculate leave out out cross validated rmse
+calc_loocv_rmse = function(model) {
+  temp=(resid(model) / (1 - hatvalues(model)))^2
+  temp=temp[is.finite(temp)]
+  sqrt(mean(temp))
+}
+```
+
+Now we will separate numeric and categorical features.
+
+```{r}
+numerical <- unlist(lapply(data, is.numeric)) # contains boolean value against each variable indicating whether that variable is a numeric or not
+```
+
+<br>
+
+#### Numeric Predictors Only
+
+
+We begin by creating a model using only the numerical predictors to model the target. Diagnostics for this model are in Figure 1.
+
+```{r}
+data_numerical= data[, numerical] # get the target and all the numerical columns
+bike_mod_num = lm(cnt ~ ., data = data_numerical) # model with all numerical variables
+summary(bike_mod_num)[["adj.r.squared"]] # get the adjusted r-squared 
+calc_loocv_rmse(bike_mod_num) # get the loocv rmse
+```
+
+This model has a rather low adjusted $R^2$ and the cross validated rmse values are quite high, which indicates that the model is not explaining the response as well as it could.
+
+We now examine the p-values for the coefficients of the model:
+
+```{r}
+summary(bike_mod_num)$coefficients[, 'Pr(>|t|)']
+```
+
+The above results show that the temp is not very significant predictor as it has a high p value, this can be attributed to the fact that temp and atemp were highly correlated as we saw in the EDA and may be because of that, the  effect of one gets eaten up by other.
+
+```{r fig.height=7, fig.width=10}
+par(mfrow = c(2, 2))
+plot(bike_mod_num,col = 'dodgerblue') # do diagnostics
+```
+
+The Fitted vs Residual plot shows a bit of non linear trend and the leverage plot also highlights some outliers.
+
+<br>
+
+#### Numeric and Categorical Predictors
+
+
+```{r}
+bike_mod_all=lm(cnt~., data=data) # model with all the variables
+summary(bike_mod_all)[["adj.r.squared"]] # get the adjusted r-squared
+calc_loocv_rmse(bike_mod_all) # get the loocv rmse
+```
+
+Including the categorical features has substantially improved the adjusted $R^2$ and lowered the loocv-rmse.
+
+P-values for coefficients for the model:
+```{r}
+summary(bike_mod_all)$coefficients[, 'Pr(>|t|)'] # get the cofficeints
+```
+
+The p-values indicate that not all of the variables are significant.
+
+Diagnostic plots for the model:
+
+```{r fig.height=7, fig.width=10}
+par(mfrow = c(2, 2))
+plot(bike_mod_all,col = 'dodgerblue') # do diagnostics
+```
+
+We still see some issues in the diagnostic plots.
+
+ * The Fitted vs Residual plot shows a non linear trend and we also see presence of some extreme outlier.
+ * We see some fat tails in the Normal Q-Q plot.
+ * The Residuals vs Leverage plot also indicates presence of some outliers which we might have to check on as we go down the analysis.
+
+
+Based upon the results, we want to examine the significance of several of the categorical variables:
+
+ * Month
+ * Week Day
+ * Working Day
+
+```{r}
+bike_mod_w_month=lm(cnt~.-mnth, data=data) # model without month
+bike_mod_w_weekday=lm(cnt~.-weekday, data=data) # model without weekday
+bike_mod_w_workingday=lm(cnt~.-workingday, data=data) # model without workingday
+anova(bike_mod_w_month,bike_mod_w_weekday,bike_mod_w_workingday,bike_mod_all) # do anova test
+```
+
+The test shows that month, weekday are significant predictors hence we can't rule them out. Even though the month variable is statistically significant, it might be that just few levels are useful and rest of them does not help. We will use model selection schemes later to investigate that.
+
+According to test results working day variable seems to be non significant and we can rule out this variable.
+
+We will now re-fit the model excluding working day:
+
+```{r}
+data_2= data[,c(-6)] # remove working day variable
+bike_mod_all_2=lm(cnt~., data=data_2) # model with all remaining variable
+summary(bike_mod_all_2)[["adj.r.squared"]] # get the adjusted r-squared
+calc_loocv_rmse(bike_mod_all_2) # get the loocv rmse
+```
+
+Excluding working day had no effect on the $R^2$ of the model, so we can safely remove that feature.
+
+<br>
+
+#### Identifying Co linearity
+
+
+Now we will using the Variance Inflation Factor to determine if we have multi co linearity issues:
+
+```{r}
+vif(bike_mod_all_2)
+```
+
+
+As we had suspected, temp and atemp have a high level of co linearity. We will now look at the partial correlation coefficient between temp and cnt:
+
+```{r}
+temp_model_1 <- lm(temp ~ . - cnt, data = data_2)
+temp_model_2 <- lm(cnt ~ . - temp, data = data_2)
+
+cor(resid(temp_model_1), resid(temp_model_2))
+```
+
+While this is relatively small, as temp and atemp are highly correlated we should check the partial correlation coefficient after removing atemp:
+
+```{r}
+temp_model_1 <- lm(temp ~ . - cnt - atemp, data = data_2)
+temp_model_2 <- lm(cnt ~ . - temp - atemp, data = data_2)
+
+cor(resid(temp_model_1), resid(temp_model_2))
+```
+
+Now we will check the partial correlation coefficient between atemp and cnt, removing temp:
+
+```{r}
+temp_model_1 <- lm(atemp ~ . - cnt - temp, data = data_2)
+temp_model_2 <- lm(cnt ~ . - atemp - temp, data = data_2)
+
+cor(resid(temp_model_1), resid(temp_model_2))
+```
+
+These results indicate that temp is more correlated with cnt than atemp is, so we will remove atemp and leave temp:
+
+```{r}
+data_3= data_2[,-8]
+bike_mod_all_3=lm(cnt~., data=data_3)
+summary(bike_mod_all_3)[["adj.r.squared"]] # get the adjusted r-squared
+calc_loocv_rmse(bike_mod_all_3) # get the loocv rmse
+```
+
+This change has slightly lowered the adjusted $R^2$ as we would expect removing a predictor would, but has improved the LOOCV-RMSE, which indicates that it has improved the model.
+
+As we have concerns about the year predictor, we will also look at the partial correlation coefficient between year and count:
+
+```{r}
+yr_mod_0 <- lm(cnt ~ . - yr, data = data_3)
+yr_mod_1 <- lm(yr ~ . - cnt, data = data_3)
+
+cor(resid(yr_mod_0), resid(yr_mod_1))
+```
+
+This is quite high which indicates that the year has a significant relationship with ridership. We have seen that the ridership seems to be increasing from year to year (with some seasonal cycles within that trend.) Since our data only includes two years this may cause problems with using the model to extrapolate to years that are not included in the training set. However, the high partial correlation coefficient indicates that year is an important predictor so we will leave it in the model.
+
+<br>
+
+#### Outlier Diagnostics
+
+
+Next we would want to also check for potential outliers , we have 3 ways of doing so :
+
+ * Leverage
+ * Standard Residual
+ * Cooks Distance
+
+We will be using Cooks Distance to identify any such outlier and see the effect of it on the model.
+
+First will calculate the number of observations flagged by Cooks Distance:
+
+```{r}
+sum(cooks.distance(bike_mod_all_3) > 4 / length(cooks.distance(bike_mod_all_3)))
+```
+
+Now we will refit a model excluding the identified observations:
+
+```{r}
+cokks_distance = cooks.distance(bike_mod_all_3)
+bike_mod_all_4 = lm(cnt ~.,
+                    data = data_3,
+                    subset = cokks_distance <= 4 / length(cokks_distance))
+summary(bike_mod_all_4)[["adj.r.squared"]] # get the adjusted r-squared
+calc_loocv_rmse(bike_mod_all_4) # get the loocv rmse
+```
+
+Removing these outliers resulted in a substantial increase in $R^2$ and a substantial decrease in LOOCV-RMSE.
+ 
+```{r fig.height=7, fig.width=10}
+par(mfrow = c(2, 2))
+plot(bike_mod_all_4,col = 'dodgerblue') # do diagnostics
+```
+
+In the Residuals vs Fitted plot we see that the residuals start to look more normal, although we do still see some non-linear patterns which indicate that we may want to try some higher order terms or transformations.
+
+The Residuals vs Leverage plot also looks much neater and the Normal Q-Q plot has also improved. 
+
+<br>
+
+#### Interactions
+
+
+We will now evaluate including interactions:
+
+```{r warning=FALSE}
+bike_mod_all_5 = lm(cnt ~.^2,
+                    data = data_3,
+                    subset = cokks_distance <= 4 / length(cokks_distance))
+summary(bike_mod_all_5)[["adj.r.squared"]] # get the adjusted r-squared
+```
+
+Including all possible interactions resulted in a substantial improvement in adjusted $R^2$, however we can not be sure if this improvement is due to the model or merely due to the inclusion of additional predictors.
+
+```{r}
+calc_loocv_rmse(bike_mod_all_5) # get the loocv rmse
+```
+
+The LOOCV-RMSE has increased, which indicates that the additional terms may have resulted in over fitting the data.
+
+```{r fig.height=7, fig.width=10, warning=FALSE}
+par(mfrow = c(2, 2))
+plot(bike_mod_all_5,col = 'dodgerblue') # do diagnostics
+length(coef(bike_mod_all_5)) # get the number of params
+```
+
+The residual vs fitted plot looks random with errors randomly distributed around 0 line, there are still some outliers which are getting highlighted on the plot.
+
+The Q-Q plot looks more normal.
+
+The leverage plot shows some indication of potential new outliers. 
+
+<br>
+
+#### Model Selection
+
+
+Since the model including all possible interactions increased the LOOCV-RMSE, indicating that it was over fitting to the training data, we will perform a backwards AIC step search to remove the non-significant terms.
+
+```{r warning=FALSE, cache=TRUE}
+bike_mod_all_6=step(bike_mod_all_5, trace=0, direction="backward")
+length(coef(bike_mod_all_6)) # get the no of params
+summary(bike_mod_all_6)[["adj.r.squared"]] # get the adjusted r-squared
+```
+
+While decreasing the number of predictors from `r length(coef(bike_mod_all_5))` to `r length(coef(bike_mod_all_6))`, the backwards step search also resulted in a very small improvement in adjusted $R^2$.
+
+```{r}
+calc_loocv_rmse(bike_mod_all_6) # get the loocv rmse
+```
+
+The LOOCV-RMSE also significantly improved, which indicates that this smaller model is a much better model for inference.
+
+```{r fig.height=7, fig.width=10, warning=FALSE}
+par(mfrow = c(2, 2))
+plot(bike_mod_all_6,col = 'dodgerblue') # do diagnostics
+```
+
+The Residuals vs Fitted plot still looks normal.
+
+<br>
+
+#### Polynomial Features
+
+
+We have previously seen some issues which indicated that polynomial features might improve the model. We will now evaluate including them:
+
+```{r, cache=TRUE}
+temp_mod = lm(cnt ~ .+I(temp^2)+I(hum^2)+I(windspeed^2),
+                    data = data_3,
+                    subset = cokks_distance <= 4 / length(cokks_distance))
+bike_mod_all_7=step(temp_mod, trace=0, direction="backward")
+summary(bike_mod_all_7)[["adj.r.squared"]] # get the adjusted r-squared
+```
+
+The adjusted $R^2$ is lower than it was for our interaction model.
+
+```{r}
+calc_loocv_rmse(bike_mod_all_7) # get the loocv rmse
+```
+
+The LOOCV-RMSE has also increased.
+
+```{r fig.height=7, fig.width=10}
+par(mfrow = c(2, 2))
+plot(bike_mod_all_7,col = 'dodgerblue') # do diagnostics
+```
+
+The residual vs fitted plot does not look random and shows some non linear pattern, which indicate that the inclusion of these terms has not improved the model. However $temp^2$ has a very low p-value which indicates that it may be useful. We will keep this in mind.
+
+<br>
+
+#### Transformations
+
+
+We will now evaluate taking a log transformation of the response.
+
+```{r warning=FALSE, cache=TRUE}
+temp_m = lm(log(cnt) ~.^2,
+                    data = data_3,
+                    subset = cokks_distance <= 4 / length(cokks_distance))
+bike_mod_all_8=step(temp_m, trace=0, direction="backward")
+summary(bike_mod_all_8)[["adj.r.squared"]] # get the adjusted r-squared
+```
+
+The adjusted $R^2$ has been lowered by this transformation.
+
+```{r fig.height=7, fig.width=10, warning=FALSE}
+par(mfrow = c(2, 2))
+plot(bike_mod_all_8,col = 'dodgerblue') # do diagnostics
+```
+
+In addition we see issues in both the Residuals vs Fitted plot and the Normal Q-Q plot. We can conclude that this transformation was not helpful.
+
+<br>
+
+#### Poisson Regression
+
+
+Since the target is a count variable, we will evaluate a Poisson regression.
+
+```{r, cache=TRUE}
+poisson_mod = glm(cnt ~ (. ^2),
+                    data = data_3,
+                    subset = cokks_distance <= 4 / length(cokks_distance), family=poisson)
+
+bike_mod_all_9 = step(poisson_mod, trace=0, direction="backward")
+```
+
+Since Poisson models apply transformations we will need to do a bit of work to estimate the LOOCV-RMSE:
+
+```{r}
+filter = cokks_distance <= 4 / length(cokks_distance)
+e <- data_3$cnt[filter] - bike_mod_all_9$fitted.values
+temp=(e / (1 - hatvalues(bike_mod_all_9)))^2
+temp=temp[is.finite(temp)]
+sqrt(mean(temp))
+```
+
+While we are not confident that this LOOCV-RMSE value is correct given the internal transformations performed by Poisson GLMs, the value is in line with those produced by earlier models and is significantly higher than our best models.
+
+```{r fig.height=7, fig.width=10,warning=FALSE}
+par(mfrow = c(2, 2))
+plot(bike_mod_all_9,col = 'dodgerblue') # do diagnostics
+```
+
+While we see some issues with the lower tail of the Normal Q-Q plot the Residuals vs Fitted plot indicates no issues.
+
+Due to the lack of available metrics to compare the Poisson regressor with our other models, we will continue with the non-GLM models.
+
+<br>
+
+#### Interactions with Polynomial Terms
+
+
+Finally, since some of the polynomial terms seemed as if they could be significant, we will try a model which includes interactions and polynomial terms:
+
+```{r, cache=TRUE}
+bike_mod_int_poly = lm(cnt ~(. ^ 2) + I(temp^2) + I(hum^2) + I(windspeed^2),
+                    data = data_3,
+                    subset = cokks_distance <= 4 / length(cokks_distance))
+bike_mod_all_10 = step(bike_mod_int_poly, trace=0, direction="backward")
+summary(bike_mod_all_10)[["adj.r.squared"]] # get the adjusted r-squared
+```
+
+The adjusted $R^2$ is the best we have found yet.
+
+```{r}
+calc_loocv_rmse(bike_mod_all_10) # get the loocv rmse
+```
+
+And this model also results in the lowest LOOCV-RMSE.
+
+Finally we will refit the model using the full data set, find the observations with high leverage and refit the model excluding those items:
+
+```{r, cache=TRUE}
+bike_mod_int_poly_full = lm(cnt ~(. ^ 2) + I(temp^2) + I(hum^2) + I(windspeed^2),
+                    data = data_3)
+bike_mod_all_11 = step(bike_mod_int_poly_full, trace=0, direction="backward")
+
+cooks_distance = cooks.distance(bike_mod_all_11) # find influential observations and exclude them
+filter = cooks_distance <= (4 / length(cooks_distance))
+# some points have a cooks distance of NA, we will consider these to be outliers
+filter[is.na(filter)] <- FALSE
+
+bike_mod_int_poly_full = lm(cnt ~(. ^ 2) + I(temp^2) + I(hum^2) + I(windspeed^2),
+                    data = data_3,
+                    subset = filter)
+bike_mod_all_11 = step(bike_mod_int_poly_full, trace=0, direction="backward")
+summary(bike_mod_all_11)[["adj.r.squared"]] # get the adjusted r-squared
+calc_loocv_rmse(bike_mod_all_11) # get the loocv rmse
+```
+
+Finding and removing the observations with high leverage has improved the LOOCV-RMSE and the $R^2$.
+
+<br>
+
+***
+
+## Results
+
+
+Our best model included both interactions and polynomial terms. 
+
+```{r}
+summary(bike_mod_all_11)$coef
+```
+
+It uses `r length(coef(bike_mod_all_11))` predictors, which is quite a lot, and the p-values for many of them indicate that they may not be significant. However, it appears that the non-significant terms are levels for factor variables which may be difficult to remove.
+
+```{r fig.height=7, fig.width=10}
+plot(bike_mod_all_11$fitted.values, data_3$cnt[filter], main = "Fitted Values vs Actual", xlab = "Fitted Values", ylab = "Ground Truth", col = "darkblue", pch = 20)
+abline(0, 1, col = "firebrick4", lwd = 3)
+```
+
+We also see that the fitted value for this model are quite close to the actual values.
+
+```{r}
+summary(bike_mod_all_11)$adj.r
+```
+
+The adjusted $R^2$ indicates that the model explains `r summary(bike_mod_all_11)$adj.r` of the variance in the data.
+
+The LOOCV-RMSE of the model is `r calc_loocv_rmse(bike_mod_all_11)`.
+
+```{r fig.height=7, fig.width=10, warning=FALSE}
+par(mfrow = c(2, 2))
+plot(bike_mod_all_11,col = 'dodgerblue') # do diagnostics
+```
+
+The diagnostic plots all appear to be acceptable, although there are still some points with very high leverage.
+
+```{r}
+sqrt(mean(bike_mod_all_11$residuals^2))
+```
+
+The model has an rmse of 344 which means that on an average the model predictions are off by this much amount.
+
+```{r warning=FALSE}
+# Count the number of high VIF's in the model
+sum(vif(bike_mod_all_11) > 10)
+```
+
+This was expected due to high number of categorical variables and their interactions. Also since we are mainly focussing on demand prediction, we tuned our model for better prediction by sacrificing interpretability.
+
+
+```{r,fig.height=6, fig.width=10}
+hist(resid(bike_mod_all_11), col = "lightslateblue", main = "Histogram of Residuals", xlab = "Residuals")
+```
+
+
+The histogram of residuals looks nearly normal which confirms the fact that the model has noise which are normally distributed and centered about 0.
+
+
+So far we have seen that we tried multiple approaches to evolve our understanding of what should work to have a model with a good performance without sacrificing the high variance nature of the model and looks like we have reached a decent spot where we not only have a model with high adjusted $R^2$ value but also a low loocv rmse.
+
+<br>
+
+***
+
+## Discussion
+
+
+While the final model contained a large number of predictors, making it difficult to interpret, the results indicate that it is very good at explaining the relationship between weather, season and bike sharing rentals. We tried evaluating using BIC to reduce the size of the final model, however doing so resulted in a lowered LOOCV-RMSE, so we preferred the AIC selected model.
+
+As expected, the weather situation is an especially important predictor, both by itself and in its interactions with other predictors, indicating that rain has a significant impact on the number of rentals, especially the interaction between light rain and windspeed.
+
+We have some concerns about the inclusion of the year as a predictor as it may cause problems with using the model for inference on unseen data. While initially it was used as a categorical predictor, we changed it to a numeric predictor in the hopes that it would make the model generalize better to data from the future, should that ever be required. We attempted to model the data excluding year, however the general increasing ridership between the years proved to be an important factor. Future work could incorporate data from additional years to see if this trend continues.
+
+The high adjusted $R^2$ of the model indicates that a very large portion of the variance in the data can be explained by this model, which would make it very useful for predicting demand for bikes.
+
+While we feel that a Poisson model would lend itself nicely to this data, the lack of available metrics to compare Poisson models with normal linear models made it prohibitively complicated to pursue, and the excellent performance of the non-Poisson models reduced the importance of pursuing Poisson models.
+
+### Future Improvisations:
+1. Looking at the distribution of data between demand and type of day as well as from the outlier detection through cook's method it might be suitable to build seperate models for Holidays, Workdays and Weekend.
+2. We can extend this model to apply Seasonality analysis to see how season and days of week affect the response as well analyze the overall demand trend year on year after treating seasonal component in the data.
+
+<br>
+
+***
+
+## Appendix
+
+<br>
+
+### Distribution of Target
+
+
+```{r target_dist,fig.height=7, fig.width=10}
+data = read.csv("day.csv")
+summary(data$cnt)
+
+hist(data$cnt, col = "lightslateblue", main = "Histogram of Total Ridership Count", xlab = "Total Ridership Count")
+```
+
+It seems sort of normally distributed, although since it is a count it should follow a Poisson distribution rather than normal.
+
+<br>
+
+### Pairs plots between numeric features
+
+
+```{r pairs_plot, cache=TRUE,fig.height=7, fig.width=10}
+pairs(data[,10:16], main = "Pairs Plot for Numeric Features")
+```
+
+It looks like there are relationships between temp and cnt, although not necessarily linear. The other relationships are not so clear.
+
+<br>
+
+### Correlation Between Numeric Features
+
+
+
+```{r correlation}
+cor(data[,10:16])
+```
+
+<br>
+
+### Distributions of Numeric Features
+
+
+```{r feature_dists,fig.height=5, fig.width=10}
+summary(data[,10:13])
+
+par(mfrow=c(2,2))
+hist(data[,10], main="Temp", xlab = "Temperature (Celsius)", col = "tomato")
+
+hist(data[,11], main="ATemp", xlab = "Normalized Temperature", col = "tomato2")
+
+hist(data[,12], main="Humidity", xlab = "Humidity", col = "turquoise1")
+
+hist(data[,13], main="Windspeed", xlab = "Windspeed", col = "skyblue")
+```
+
+These do not appear to be normally distributed, although Windspeed could possibly be turned into normal distributions with transformations and Humidity is fairly close to normal.
+
+<br>
+
+### Distributions of Categorical Features
+
+
+```{r cat_feature_dists,fig.height=5, fig.width=10}
+par(mfrow=c(1,3))
+barplot(prop.table(table(data$season)), col = 1:4, main = "Distribution of Season", xlab = "Season", ylab = "Count")
+
+barplot(prop.table(table(data$mnth)), col = 1:12,  main = "Distribution of Months", xlab = "Month", ylab = "Count")
+
+barplot(prop.table(table(data$weekday)), col = 1:12,  main = "Distribution of Weekdays", xlab = "Weekday?", ylab = "Count")
+
+barplot(prop.table(table(data$holiday)), col = 6:12,  main = "Distribution of Holidays", xlab = "Holiday", ylab = "Count")
+
+barplot(prop.table(table(data$workingday)), col = 8:12,  main = "Distribution of Working Days", xlab = "Working Day", ylab = "Count")
+
+barplot(prop.table(table(data$weathersit)), col = 10:12,  main = "Distribution of Weather Types", xlab = "Weather Type", ylab = "Count")
+
+```
+
+It appears that Months, Seasons and Weekdays are distributed uniformly. However, there are very few holidays, more working days than non-working days and the weather seems to be mostly clear.
+
+<br>
+
+### Categorical Features vs Response
+
+
+```{r more_plots,fig.height=5, fig.width=10}
+# create a color palette
+palette(brewer.pal(n = 12, name = "Set3"))
+
+par(mfrow=c(1,3))
+barplot(aggregate(x = data$cnt, by = list(data$mnth), FUN = sum)$x, names = c("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"), main = "Total Ridership By Month", col = 1:12)
+
+palette(brewer.pal(n = 4, name = "Accent"))
+barplot(aggregate(x = data$cnt, by = list(data$season), FUN = sum)$x, names = c("spring", "summer", "fall", "winter"), main = "Total Ridership By Season", col = 1:4)
+
+palette(brewer.pal(n = 4, name = "Set1"))
+barplot(aggregate(x = data$cnt, by = list(data$weathersit), FUN = sum)$x, names = c("Clearish", "Misty", "LightPrecip"), main = "Total Ridership By Weather Type", col = 1:4)
+```
+
+There appears to be relationships between the Month, Season and Weather and Total Ridership. However the Total Ridership by Weather Type resembles the distribution of Weather, so this relationship may not be so important.
+
+```{r more_plots_2,fig.height=5, fig.width=10}
+par(mfrow=c(1,3))
+palette(brewer.pal(n = 4, name = "Set3"))
+barplot(aggregate(x = data$cnt, by = list(data$holiday), FUN = sum)$x, names = c("No", "Yes"), main = "Total Ridership By Holiday", col = 1:12)
+
+palette(brewer.pal(n = 4, name = "Accent"))
+barplot(aggregate(x = data$cnt, by = list(data$workingday), FUN = sum)$x, names = c("No", "Yes"), main = "Total Ridership By Workingday", col = 1:4)
+
+palette(brewer.pal(n = 7, name = "Set2"))
+barplot(aggregate(x = data$cnt, by = list(data$weekday), FUN = sum)$x, names = c("Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"), main = "Total Ridership By Weekday", col = 1:7)
+```
+
+While there is a higher ridership on non-holidays and workingdays, these very closely resemble the distributions of Holidays and Workingdays in the data, so these may not be very useful as predictors. 
+
+```{r even_more_plots,fig.height=5, fig.width=10}
+par(mfrow=c(1,3))
+palette(brewer.pal(n = 6, name = "Dark2"))
+plot(data$temp, data$cnt, main = "Temp vs Total Ridership", xlab = "Temp", ylab = "Total Ridership", col = 1)
+
+plot(data$hum, data$cnt, main = "Humidity vs Total Ridership", ylab = "Total Ridership", xlab = "Humidity", col = 2)
+
+plot(data$windspeed, data$cnt, main = "Windspeed vs Total Ridership", ylab = "Total Ridership", xlab = "Windspeed", col = 3)
+```
+It seems that there is a somewhat linear relationship between temperature and total ridership, although it may be more polynomial. It is not clear what the relationships between Humidity and Windspeed and Ridership are.
+
+```{r features_against_each_other,fig.height=5, fig.width=10}
+par(mfrow=c(1,3))
+plot(data$windspeed, data$hum, main = "Windspeed vs Humidity", ylab = "Humidity", xlab = "Windspeed", col = 4)
+
+plot(data$windspeed, data$temp, main = "Windspeed vs Temp", ylab = "Temp", xlab = "Windspeed", col = 5)
+
+plot(data$hum, data$temp, main = "Humidity vs Temp", ylab = "Temp", xlab = "Humidity", col = 6)
+```
+
+It seems as if these numerical features may be related somehow, although they do not seem to be related linearly.
+
+<br>
+
+### Finding Interactions
+
+
+First we will look at box plots of Total Ridership by the categorical features to see if anything stands out as worth exploring:
+
+```{r box_plots,fig.height=5, fig.width=10}
+palette(brewer.pal(n = 12, name = "Set3"))
+par(mfrow = c(1,2))
+boxplot(cnt ~ weathersit, data = data, col = 1:4, main = "Count by Weather", ylab = "Total Ridership")
+boxplot(cnt ~ season, data = data, col = 5:8, main = "Count by Season", ylab = "Total Ridership")
+boxplot(cnt ~ mnth, data = data, col = 1:12, main = "Count by Month", ylab = "Total Ridership")
+boxplot(cnt ~ weekday, data = data, col = 1:7, main = "Count by Weekday", ylab = "Total Ridership")
+boxplot(cnt ~ workingday, data = data, col = 8:10, main = "Count by Working Day", ylab = "Total Ridership")
+boxplot(cnt ~ holiday, data = data, col = 10:12, main = "Count by Holiday", ylab = "Total Ridership")
+```
+
+It appears that Weather, Season and Month may be worth further exploration, Weekday and Working Day don't seem to be of much interest, and while the mean Ridership on Holidays is lower than on non-Holidays, it is not significantly lower.
+
+We will now look at some interactions between the categorical features we identified above and some numerical features. 
+
+```{r interaction_plots_by_season,fig.height=5, fig.width=10}
+par(mfrow=c(1,2))
+palette(brewer.pal(n = 4, name = "Set1"))
+plot(data$temp, data$cnt, col = data$season, pch = 20, main = "Ridership vs Temp by Season", xlab = "Temperature", ylab = "Ridership")
+legend("topleft", legend = c("Spring", "Summer", "Fall", "Winter"), col = 1:5, lwd = 1, lty = c(0,0), pch = 20)
+
+plot(data$hum, data$cnt, col = data$season, pch = 20, main = "Ridership vs Humidity by Season", xlab = "Humidity", ylab = "Ridership")
+legend("topleft", legend = c("Spring", "Summer", "Fall", "Winter"), col = 1:5, lwd = 1, lty = c(0,0), pch = 20)
+```
+
+As we would expect the temperature to be correlated to the season the Ridership vs Temperature plot doesn't show any interesting patterns. However, the Ridership vs Humidity plot has vertical clusters which could indicate interesting correlations.
+
+```{r interaction_plots_by_weather,fig.height=5, fig.width=10}
+par(mfrow=c(1,2))
+palette(brewer.pal(n = 4, name = "Set2"))
+plot(data$temp, data$cnt, col = data$weathersit, pch = 20, main = "Ridership vs Temp by Weather", xlab = "Temperature", ylab = "Ridership")
+legend("topleft", legend = c("Clear", "Misty", "Light Precip"), col = 1:5, lwd = 1, lty = c(0,0), pch = 20)
+
+plot(data$hum, data$cnt, col = data$weathersit, pch = 20, main = "Ridership vs Humidity by Weather", xlab = "Humidity", ylab = "Ridership")
+legend("topleft", legend = c("Clear", "Misty", "Light Precip"), col = 1:5, lwd = 1, lty = c(0,0), pch = 20)
+```
+
+Similarly, as we would expect Humidity to be correlated with Weather the Ridership vs Humidity plot doesn't show any interesting patterns while the Ridership vs Temperature plot indicates that there may be some 
+
+```{r interaction_plots_by_month,fig.height=5, fig.width=10}
+par(mfrow = c(1,2))
+palette(brewer.pal(n = 12, name = "Set3"))
+plot(data$temp, data$cnt, col = data$mnth, pch = 20, main = "Ridership vs Temp by Month", xlab = "Temp", ylab = "Ridership")
+
+plot(data$hum, data$cnt, col = data$mnth, pch = 20, main = "Ridership vs Humidity by Month", xlab = "Temp", ylab = "Ridership")
+legend("topleft", legend = c("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"), col = 1:12, lwd = 1, lty = c(0,0), pch = 20)
+```
+
+It is difficult to draw conclusions from the plots above, however both interaction may merit further investigation.
+
+***

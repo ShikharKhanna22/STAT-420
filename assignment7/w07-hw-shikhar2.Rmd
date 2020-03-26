@@ -1,0 +1,523 @@
+---
+title: "Week 7 - Homework"
+author: "STAT 420, Summer 2019, SKhanna"
+date: '6/28/2019'
+output:
+  html_document: 
+    toc: yes
+  pdf_document: default
+urlcolor: cyan
+---
+
+
+
+***
+
+```{r setup, echo = FALSE, message = FALSE, warning = FALSE}
+options(scipen = 1, digits = 4, width = 80, fig.alin = "center")
+```
+
+## Exercise 1 (EPA Emissions Data)
+
+For this exercise, we will use the data stored in [`epa2015.csv`](epa2015.csv). It contains detailed descriptions of 4,411 vehicles manufactured in 2015 that were used for fuel economy testing [as performed by the Environment Protection Agency]( https://www3.epa.gov/otaq/tcldata.htm). The variables in the dataset are:  
+
+- `Make` - Manufacturer
+- `Model` - Model of vehicle
+- `ID` - Manufacturer defined vehicle identification number within EPA's computer system (not a VIN number)
+- `disp` - Cubic inch displacement of test vehicle
+- `type` - Car, truck, or both (for vehicles that meet specifications of both car and truck, like smaller SUVs or crossovers)
+- `horse` - Rated horsepower, in foot-pounds per second
+- `cyl` - Number of cylinders
+- `lockup` - Vehicle has transmission lockup; N or Y
+- `drive` - Drivetrain system code
+    - A = All-wheel drive
+    - F = Front-wheel drive
+    - P = Part-time 4-wheel drive
+    - R = Rear-wheel drive
+    - 4 = 4-wheel drive
+- `weight` - Test weight, in pounds
+- `axleratio` - Axle ratio
+- `nvratio` - n/v ratio (engine speed versus vehicle speed at 50 mph)
+- `THC` - Total hydrocarbons, in grams per mile (g/mi)
+- `CO` - Carbon monoxide (a regulated pollutant), in g/mi
+- `CO2` - Carbon dioxide (the primary byproduct of all fossil fuel combustion), in g/mi
+- `mpg` - Fuel economy, in miles per gallon
+
+We will attempt to model `CO2` using both `horse` and `type`. In practice, we would use many more predictors, but limiting ourselves to these two, one numeric and one factor, will allow us to create a number of plots.
+
+Load the data, and check its structure using `str()`. Verify that `type` is a factor; if not, coerce it to be a factor.
+
+```{r}
+epa <- read.csv(file="epa2015.csv")
+str(epa)
+is.factor(epa$type)
+```
+
+
+**(a)** Do the following:
+
+- Make a scatterplot of `CO2` versus `horse`. Use a different color point for each vehicle `type`.
+
+```{r}
+plot(CO2 ~ horse, data=epa, col=as.numeric(epa$type)+1,
+       ylab="Carbon dioxide (g/mi)",
+       xlab="Horsepower (foot-pounds per second)",
+       main="Horsepower vs Carbon dioxide",
+       pch=20,
+       cex=0.8) 
+legend("topright", c("Both", "Car", "Truck"), col=c(2,3,4), pch = 20)
+
+```
+
+
+- Fit a simple linear regression model with `CO2` as the response and only `horse` as the predictor.
+
+```{r}
+epa_slr= lm(CO2 ~ horse, data=epa)
+```
+
+- Add the fitted regression line to the scatterplot. Comment on how well this line models the data.
+
+```{r}
+plot(CO2 ~ horse, data=epa, col=as.numeric(epa$type)+1,
+       ylab="Carbon dioxide (g/mi)",
+       xlab="Horsepower (foot-pounds per second)",
+       main="Horsepower vs Carbon dioxide",
+       pch=20,
+       cex=0.8) 
+abline(epa_slr, lwd = 2)
+legend("topright", c("Both", "Car", "Truck"), col=c(2,3,4), pch = 20)
+```
+
+**Comment:**  The line seems to fit well overall taking all points into account, but for individual vehicle types, we can do better by having multiple lines fitted for each vehicle type.
+
+
+- Give an estimate for the average change in `CO2` for a one foot-pound per second increase in `horse` for a vehicle of type `car`. 
+
+```{r}
+coef(epa_slr)[[2]]
+```
+
+- Give a 90% prediction interval using this model for the `CO2` of a Subaru Impreza Wagon, which is a vehicle with 148 horsepower and is considered type `Both`. (Interestingly, the dataset gives the wrong drivetrain for most Subarus in this dataset, as they are almost all listed as `F`, when they are in fact all-wheel drive.)
+
+```{r}
+predict(epa_slr, level=0.90, newdata = data.frame(horse=148), interval = "prediction")
+```
+
+
+**(b)** Do the following:
+
+- Make a scatterplot of `CO2` versus `horse`. Use a different color point for each vehicle `type`.
+
+```{r}
+plot(CO2 ~ horse, data=epa, col=as.numeric(epa$type)+1,
+       ylab="Carbon dioxide (g/mi)",
+       xlab="Horsepower (foot-pounds per second)",
+       main="Horsepower vs Carbon dioxide",
+       pch=20,
+       cex=0.8) 
+abline(epa_slr, lwd = 2)
+legend("topright", c("Both", "Car", "Truck"), col=c(2,3,4), pch = 20)
+```
+
+- Fit an additive multiple regression model with `CO2` as the response and `horse` and `type` as the predictors.
+
+```{r}
+(epa_add = lm(CO2 ~ horse + type, data=epa))
+```
+
+- Add the fitted regression "lines" to the scatterplot with the same colors as their respective points (one line for each vehicle type). Comment on how well this line models the data. 
+
+```{r}
+intcp_both  = coef(epa_add)[1]
+intcp_car   = coef(epa_add)[1] + coef(epa_add)[3]
+intcp_truck = coef(epa_add)[1] + coef(epa_add)[4]
+
+slope_both  = coef(epa_add)[2]
+slope_car   = coef(epa_add)[2]
+slope_truck = coef(epa_add)[2]
+
+plot(CO2 ~ horse, data=epa, col=as.numeric(epa$type)+1,
+       ylab="Carbon dioxide (g/mi)",
+       xlab="Horsepower (foot-pounds per second)",
+       main="Horsepower vs Carbon dioxide",
+       pch=20,
+       cex=0.8) 
+abline(intcp_both, slope_both, col = 2, lwd = 2)
+abline(intcp_car, slope_car, col = 3, lwd = 2)
+abline(intcp_truck, slope_truck, col = 4, lwd = 2)
+legend("topright", c("Both", "Car", "Truck"), col=c(2,3,4), pch = 20)
+```
+
+**Comment:**  This is a better estimate than the single line estimation for all vehicle types. It clearly looks evident that the fitted line captures some of the underlying pattern of different vehicle types in terms of the intercept or relative position from x-axis.
+
+
+- Give an estimate for the average change in `CO2` for a one foot-pound per second increase in `horse` for a vehicle of type `car`. 
+
+```{r}
+coef(epa_add)[[2]]
+```
+
+- Give a 90% prediction interval using this model for the `CO2` of a Subaru Impreza Wagon, which is a vehicle with 148 horsepower and is considered type `Both`. 
+
+```{r}
+predict(epa_add, newdata = data.frame(horse=148, type="Both"), level=0.90, interval = "prediction")
+```
+
+
+**(c)** Do the following:
+
+- Make a scatterplot of `CO2` versus `horse`. Use a different color point for each vehicle `type`. 
+
+```{r}
+plot(CO2 ~ horse, data=epa, col=as.numeric(epa$type)+1,
+       ylab="Carbon dioxide (g/mi)",
+       xlab="Horsepower (foot-pounds per second)",
+       main="Horsepower vs Carbon dioxide",
+       pch=20,
+       cex=0.8) 
+abline(epa_slr, lwd = 2)
+legend("topright", c("Both", "Car", "Truck"), col=c(2,3,4), pch = 20)
+```
+
+- Fit an interaction multiple regression model with `CO2` as the response and `horse` and `type` as the predictors.
+
+```{r}
+epa_int = lm(CO2 ~ horse * type, data=epa)
+```
+
+- Add the fitted regression "lines" to the scatterplot with the same colors as their respective points (one line for each vehicle type). Comment on how well this line models the data. 
+
+```{r}
+int_both  = coef(epa_int)[1]
+int_car   = coef(epa_int)[1] + coef(epa_int)[3]
+int_truck = coef(epa_int)[1] + coef(epa_int)[4]
+
+slope_both  = coef(epa_int)[2]
+slope_car   = coef(epa_int)[2] + coef(epa_int)[5] 
+slope_truck = coef(epa_int)[2] + coef(epa_int)[6]
+
+
+plot(CO2 ~ horse, data=epa, col=as.numeric(epa$type)+1,
+       ylab="Carbon dioxide (g/mi)",
+       xlab="Horsepower (foot-pounds per second)",
+       main="Horsepower vs Carbon dioxide",
+       pch=20,
+       cex=0.8) 
+abline(int_both, slope_both, col = 2, lwd = 1)
+abline(int_car, slope_car, col = 3, lwd = 1)
+abline(int_truck, slope_truck, col = 4, lwd = 1)
+legend("topright", c("Both", "Car", "Truck"), col=c(2,3,4), pch = 20)
+```
+
+**Comment:** The interaction model is a much better model than additive model because the regression lines have greater flexibility in terms of both intercept and slope. Its clearly evident that Trucks have higher CO2 than other types which gets captured well by the interaction model.
+
+
+- Give an estimate for the average change in `CO2` for a one foot-pound per second increase in `horse` for a vehicle of type `car`. 
+
+```{r}
+coef(epa_int)[[2]] + coef(epa_int)[[5]] 
+```
+
+- Give a 90% prediction interval using this model for the `CO2` of a Subaru Impreza Wagon, which is a vehicle with 148 horsepower and is considered type `Both`. 
+
+
+```{r}
+predict(epa_int, newdata = data.frame(horse=148, type="Both"), level=0.90, interval = "prediction")
+```
+
+
+**(d)** Based on the previous plots, you probably already have an opinion on the best model. Now use an ANOVA $F$-test to compare the additive and interaction models. Based on this test and a significance level of $\alpha = 0.10$, which model is preferred?
+
+```{r}
+anova(epa_add, epa_int)
+```
+
+**Comment:** The high F-value and low p-value clearly indicates that the interaction model is much more significant than the additive model and based on $\alpha = 0.10$ the null hypothesis can be rejected, and we choose the interaction model over the additive model.
+
+***
+
+## Exercise 2 (Hospital SUPPORT Data, White Blood Cells)
+
+For this exercise, we will use the data stored in [`hospital.csv`](hospital.csv). It contains a random sample of 580 seriously ill hospitalized patients from a famous study called "SUPPORT" (Study to Understand Prognoses Preferences Outcomes and Risks of Treatment). As the name suggests, the purpose of the study was to determine what factors affected or predicted outcomes, such as how long a patient remained in the hospital. The variables in the dataset are:  
+ 
+- `Days` - Days to death or hospital discharge
+- `Age` - Age on day of hospital admission
+- `Sex` - Female or male
+- `Comorbidity` - Patient diagnosed with more than one chronic disease
+- `EdYears` - Years of education
+- `Education` - Education level; high or low
+- `Income` - Income level; high or low
+- `Charges` - Hospital charges, in dollars
+- `Care` - Level of care required; high or low
+- `Race` - Non-white or white
+- `Pressure` - Blood pressure, in mmHg
+- `Blood` - White blood cell count, in gm/dL
+- `Rate` - Heart rate, in bpm
+
+For this exercise, we will use `Age`, `Education`, `Income`, and `Sex` in an attempt to model `Blood`. Essentially, we are attempting to model white blood cell count using only demographic information.
+
+**(a)** Load the data, and check its structure using `str()`. Verify that `Education`, `Income`, and `Sex` are factors; if not, coerce them to be factors. What are the levels of `Education`, `Income`, and `Sex`?
+
+```{r}
+hospital <- read.csv(file="hospital.csv")
+str(hospital)
+is.factor(hospital$Education)
+is.factor(hospital$Income)
+is.factor(hospital$Sex)
+levels(hospital$Education)
+levels(hospital$Income)
+levels(hospital$Sex)
+```
+
+
+
+**(b)** Fit an additive multiple regression model with `Blood` as the response using `Age`, `Education`, `Income`, and `Sex` as predictors. What does `R` choose as the reference level for `Education`, `Income`, and `Sex`?
+
+```{r}
+mod_hosp_add = lm(Blood ~ Age + Education + Income + Sex, data=hospital)
+mod_hosp_add
+```
+
+**Comment**
+The reference levels are chosen alphabetically and are as follows:
+Education - High
+Income - High
+Sex - Female
+
+
+**(c)** Fit a multiple regression model with `Blood` as the response. Use the main effects of `Age`, `Education`, `Income`, and `Sex`, as well as the interaction of `Sex` with `Age` and the interaction of `Sex` and `Income`. Use a statistical test to compare this model to the additive model using a significance level of $\alpha = 0.10$. Which do you prefer?
+
+```{r}
+
+mod_hosp_int = lm(Blood ~ Age + Education + Income + Sex + Sex:Age + Sex:Income, data=hospital)
+anova(mod_hosp_add,mod_hosp_int)
+
+```
+
+**Comment:** The p-value (0.11) is more than $\alpha = 0.10$ so we cannot reject the NULL hypothesis or we cannot reject the additive model. So we select the additive model.
+
+**(d)** Fit a model similar to that in **(c)**, but additionally add the interaction between `Income` and `Age` as well as a three-way interaction between `Age`, `Income`, and `Sex`. Use a statistical test to compare this model to the preferred model from **(c)** using a significance level of $\alpha = 0.10$. Which do you prefer?
+
+```{r}
+mod_hosp_int2 = lm(Blood ~ Age + Education + Income + Sex + Sex:Age +Sex:Income + Income:Age + Age:Income:Sex, data=hospital)
+anova(mod_hosp_add,mod_hosp_int2)
+```
+
+**Comment:** The p-value (0.074) is less than $\alpha = 0.10$ so we reject the NUll hypothesis and select the interaction model (mod_hosp_int2)
+
+**(e)** Using the model in **(d)**, give an estimate of the change in average `Blood` for a one-unit increase in `Age` for a highly educated, low income, male patient.
+
+```{r}
+sum(coef(mod_hosp_int2)[c(2,6,8,9)])
+```
+
+
+
+
+***
+
+## Exercise 3 (Hospital SUPPORT Data, Stay Duration)
+
+For this exercise, we will again use the data stored in [`hospital.csv`](hospital.csv). It contains a random sample of 580 seriously ill hospitalized patients from a famous study called "SUPPORT" (Study to Understand Prognoses Preferences Outcomes and Risks of Treatment). As the name suggests, the purpose of the study was to determine what factors affected or predicted outcomes, such as how long a patient remained in the hospital. The variables in the dataset are:  
+ 
+- `Days` - Days to death or hospital discharge
+- `Age` - Age on day of hospital admission
+- `Sex` - Female or male
+- `Comorbidity` - Patient diagnosed with more than one chronic disease
+- `EdYears` - Years of education
+- `Education` - Education level; high or low
+- `Income` - Income level; high or low
+- `Charges` - Hospital charges, in dollars
+- `Care` - Level of care required; high or low
+- `Race` - Non-white or white
+- `Pressure` - Blood pressure, in mmHg
+- `Blood` - White blood cell count, in gm/dL
+- `Rate` - Heart rate, in bpm
+
+For this exercise, we will use `Blood`, `Pressure`, and `Rate` in an attempt to model `Days`. Essentially, we are attempting to model the time spent in the hospital using only health metrics measured at the hospital.
+
+Consider the model
+
+\[
+Y = \beta_0 + \beta_1 x_1 + \beta_2 x_2 + \beta_3 x_3 + \beta_4 x_1 x_2 + \beta_5 x_1 x_3 + \beta_6 x_2 x_3 + \beta_7 x_1 x_2 x_3 + \epsilon,
+\]
+
+where
+
+- $Y$ is `Days`
+- $x_1$ is `Blood`
+- $x_2$ is `Pressure`
+- $x_3$ is `Rate`.
+
+**(a)** Fit the model above. Also fit a smaller model using the provided `R` code.
+
+```{r, eval = TRUE}
+
+hospital <- read.csv(file="hospital.csv")
+days_int = lm(Days ~ Pressure * Blood * Rate, data = hospital) 
+days_add = lm(Days ~ Pressure + Blood + Rate, data = hospital)
+```
+
+Use a statistical test to compare the two models. Report the following:
+
+- The null and alternative hypotheses in terms of the model given in the exercise description
+- The value of the test statistic
+- The p-value of the test
+- A statistical decision using a significance level of $\alpha = 0.10$
+- Which model you prefer
+
+```{r}
+anova(days_add,days_int)
+```
+
+**Null Hypothesis** - The interaction terms in the interaction model are insignificant and the additive model fits data better without the interaction terms.
+
+**Alternative Hypothesis** - The interaction terms are significant and the interaction model fit the data better than the additive model.
+
+**test statistic** = 2.04  
+
+**P-value** = 0.087  
+
+**statistical decision using a significance level of $\alpha = 0.10$** - Reject the NULL hypothesis.
+
+**Preferred Model** - Interaction model (days_int) since p-value < $\alpha$
+
+**(b)** Give an expression based on the model in the exercise description for the true change in length of hospital stay in days for a 1 bpm increase in `Rate` for a patient with a `Pressure` of 139 mmHg and a `Blood` of 10 gm/dL. Your answer should be a linear function of the $\beta$s.
+
+```{r}
+summary(days_int)$coefficients
+
+```
+
+**Solution:**
+
+\[
+Y = \beta_3 + 139\beta_5 + 10\beta_6 + 1390\beta_7 + \epsilon
+\]
+
+
+
+**(c)** Give an expression based on the additive model in part **(a)** for the true change in length of hospital stay in days for a 1 bpm increase in `Rate` for a patient with a `Pressure` of 139 mmHg and a `Blood` of 10 gm/dL. Your answer should be a linear function of the $\beta$s.
+
+\[
+Y = \beta_3
+\]
+
+***
+
+## Exercise 4 ($t$-test Is a Linear Model)
+
+In this exercise, we will try to convince ourselves that a two-sample $t$-test assuming equal variance is the same as a $t$-test for the coefficient in front of a single two-level factor variable (dummy variable) in a linear model.
+
+First, we set up the data frame that we will use throughout.
+
+```{r}
+n = 30
+
+sim_data = data.frame(
+  groups = c(rep("A", n / 2), rep("B", n / 2)),
+  values = rep(0, n))
+str(sim_data)
+```
+
+We will use a total sample size of `30`, `15` for each group. The `groups` variable splits the data into two groups, `A` and `B`, which will be the grouping variable for the $t$-test and a factor variable in a regression. The `values` variable will store simulated data.
+
+We will repeat the following process a number of times.
+
+```{r}
+set.seed(420)
+sim_data$values = rnorm(n, mean = 42, sd = 3.5) # simulate response data
+summary(lm(values ~ groups, data = sim_data))
+t.test(values ~ groups, data = sim_data, var.equal = TRUE)
+```
+
+We use `lm()` to test
+
+\[
+H_0: \beta_1 = 0
+\]
+
+for the model
+
+\[
+Y = \beta_0 + \beta_1 x_1 + \epsilon
+\]
+
+where $Y$ is the values of interest, and $x_1$ is a dummy variable that splits the data in two. We will let `R` take care of the dummy variable.
+
+We use `t.test()` to test
+
+\[
+H_0: \mu_A = \mu_B
+\]
+
+where $\mu_A$ is the mean for the `A` group, and $\mu_B$ is the mean for the `B` group.
+
+The following code sets up some variables for storage.
+
+```{r}
+num_sims = 300
+lm_t = rep(0, num_sims)
+lm_p = rep(0, num_sims)
+tt_t = rep(0, num_sims)
+tt_p = rep(0, num_sims)
+```
+
+- `lm_t` will store the test statistic for the test $H_0: \beta_1 = 0$.
+- `lm_p` will store the p-value for the test $H_0: \beta_1 = 0$.
+- `tt_t` will store the test statistic for the test $H_0: \mu_A = \mu_B$.
+- `tt_p` will store the p-value for the test $H_0: \mu_A = \mu_B$.
+
+The variable `num_sims` controls how many times we will repeat this process, which we have chosen to be `300`.
+
+**(a)** Set a seed equal to your birthday. Then write code that repeats the above process `300` times. Each time, store the appropriate values in `lm_t`, `lm_p`, `tt_t`, and `tt_p`. Specifically, each time you should use `sim_data$values = rnorm(n, mean = 42, sd = 3.5)` to update the data. The grouping will always stay the same.
+
+```{r}
+birthday = 19820517
+set.seed(birthday)
+
+for (i in 1:num_sims){
+  sim_data$values = rnorm(n, mean = 42, sd = 3.5)
+  mod = lm (values ~ groups, data = sim_data)
+  lm_t[i] = summary(mod)[["coefficients"]]["groupsB", "t value"]
+  lm_p[i] = summary(mod)[["coefficients"]]["groupsB", "Pr(>|t|)"]
+
+  t_test=t.test(values ~ groups, data = sim_data, var.equal = TRUE)
+  tt_t[i]=t_test[["statistic"]]
+  tt_p[i]=t_test[["p.value"]]
+}
+```
+
+
+**(b)** Report the value obtained by running `mean(lm_t == tt_t)`, which tells us what proportion of the test statistics is equal. The result may be extremely surprising!
+
+```{r}
+mean(lm_t == tt_t)
+```
+
+
+**(c)** Report the value obtained by running `mean(lm_p == tt_p)`, which tells us what proportion of the p-values is equal. The result may be extremely surprising!
+
+```{r}
+mean(lm_p == tt_p)
+```
+
+
+**(d)** If you have done everything correctly so far, your answers to the last two parts won't indicate the equivalence we want to show! What the heck is going on here? The first issue is one of using a computer to do calculations. When a computer checks for equality, it demands **equality**; nothing can be different. However, when a computer performs calculations, it can only do so with a certain level of precision. So, if we calculate two quantities we know to be analytically equal, they can differ numerically. Instead of `mean(lm_p == tt_p)` run `all.equal(lm_p, tt_p)`. This will perform a similar calculation, but with a very small error tolerance for each equality. What is the result of running this code? What does it mean?
+
+```{r}
+all.equal(lm_p, tt_p)
+```
+
+
+**(e)** Your answer in **(d)** should now make much more sense. Then what is going on with the test statistics? Look at the values stored in `lm_t` and `tt_t`. What do you notice? Is there a relationship between the two? Can you explain why this is happening?
+
+```{r}
+head(lm_t)
+head(tt_t)
+```
+
+**Comment:** The magnitude of `lm_t` and `tt_t`are exactly the same but the signs are reversed. The signs of the t-statistics will be the same if the t-statistic for Student's t-test is calculated by subtracting the mean of group 0 from the mean of group 1.
+
+
